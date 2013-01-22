@@ -1,12 +1,14 @@
 # RailsAdmin
+[![Gem Version](https://badge.fury.io/rb/rails_admin.png)][gem]
 [![Build Status](https://secure.travis-ci.org/sferik/rails_admin.png?branch=master)][travis]
 [![Dependency Status](https://gemnasium.com/sferik/rails_admin.png?travis)][gemnasium]
 [![Code Climate](https://codeclimate.com/badge.png)][codeclimate]
-[![Pledgie](https://www.pledgie.com/campaigns/15917.png)][pledgie]
+[![Pledgie](http://www.pledgie.com/campaigns/15917.png)][pledgie]
 [![Flattr](http://api.flattr.com/button/flattr-badge-large.png)][flattr]
 
 RailsAdmin is a Rails engine that provides an easy-to-use interface for managing your data.
 
+[gem]: https://rubygems.org/gems/rails_admin
 [travis]: http://travis-ci.org/sferik/rails_admin
 [gemnasium]: https://gemnasium.com/sferik/rails_admin
 [codeclimate]: https://codeclimate.com/github/sferik/rails_admin
@@ -28,17 +30,24 @@ Hoeven][plukevdh], and [Rein Henrichs][reinh].
 
 ## Announcements
 
-* for those with `rake db:migrate` errors, update to master and check that you see the line: "[RailsAdmin] RailsAdmin initialization disabled by default." when you launch the task. If not (or if migrations still don't work), open a ticket with an application on Github that can reproduce the issue.
-
-* `config.models do ... end` is deprecated (note the 's' to models, `config.model(MyModel) do .. end` is fine), for performance reasons (forces early loading of all application's models). Duplicate to each model instead, before next release. If you really need the old behavior:
+RailsAdmin model configuration is now lazy loaded.
 
 ```ruby
-config.models.each do |m|
-  config.model m do
-    # <<<< here goes your code
+config.model 'Team' do
+  ...
+end
+
+# or
+class Team
+  rails_admin do
+    ...
   end
 end
 ```
+
+won't load the Team model.
+
+Incidentally, you are only allowed one configuration block per model.
 
 ## Features
 
@@ -152,7 +161,7 @@ list][list].
 
 [list]: http://groups.google.com/group/rails_admin
 
-If you think you found a bug in RailsAdmin, you can [submit an issue][issues].
+If you think you found a bug in RailsAdmin, you can [submit an issue](https://github.com/sferik/rails_admin/issues/new).
 
 ## Supported Ruby Versions
 This library aims to support and is [tested against][travis] the following Ruby implementations:

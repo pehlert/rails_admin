@@ -5,8 +5,9 @@ module RailsAdmin
 
     include RailsAdmin::I18nSupport
 
-    def authorized?(*args)
-      @authorization_adapter.nil? || @authorization_adapter.authorized?(*args)
+    def authorized?(action, abstract_model = nil, object = nil)
+      object = nil if object.try :new_record?
+      @authorization_adapter.nil? || @authorization_adapter.authorized?(action, abstract_model, object)
     end
 
     def current_action?(action, abstract_model = @abstract_model, object = @object)
@@ -28,6 +29,13 @@ module RailsAdmin
       return nil unless abstract_model = RailsAdmin.config(_current_user.class).abstract_model
       return nil unless edit_action = RailsAdmin::Config::Actions.find(:edit, {:controller => self.controller, :abstract_model => abstract_model, :object => _current_user })
       link_to _current_user.email, url_for(:action => edit_action.action_name, :model_name => abstract_model.to_param, :id => _current_user.id, :controller => 'rails_admin/main')
+    end
+
+    def logout_path
+      if defined?(Devise)
+        scope = Devise::Mapping.find_scope!(_current_user)
+        main_app.send("destroy_#{scope}_session_path") rescue false
+      end
     end
 
     def wording_for(label, action = @action, abstract_model = @abstract_model, object = @object)
@@ -88,14 +96,18 @@ module RailsAdmin
         parent_actions.map do |a|
           am = a.send(:eval, 'bindings[:abstract_model]')
           o = a.send(:eval, 'bindings[:object]')
-          content_tag(:li, :class => "#{"active" if current_action?(a, am, o)}") do
-            if a.http_methods.include?(:get)
-              link_to wording_for(:breadcrumb, a, am, o), { :action => a.action_name, :controller => 'rails_admin/main', :model_name => am.try(:to_param), :id => (o.try(:persisted?) && o.try(:id) || nil) }, :class => 'pjax'
+          content_tag(:li, :class => current_action?(a, am, o) && "active") do
+            crumb = if a.http_methods.include?(:get)
+              link_to url_for(:action => a.action_name, :controller => 'rails_admin/main', :model_name => am.try(:to_param), :id => (o.try(:persisted?) && o.try(:id) || nil)), :class => 'pjax' do
+                wording_for(:breadcrumb, a, am, o)
+              end
             else
               content_tag(:span, wording_for(:breadcrumb, a, am, o))
             end
+            crumb+= content_tag(:span, '/', :class => 'divider') unless current_action?(a, am, o)
+            crumb
           end
-        end.reverse.join('<span class="divider">/</span>').html_safe
+        end.reverse.join().html_safe
       end
     end
 

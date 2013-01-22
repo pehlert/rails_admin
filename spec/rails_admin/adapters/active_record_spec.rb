@@ -13,6 +13,7 @@ describe "RailsAdmin::Adapters::ActiveRecord", :active_record => true do
       class ARBlog < ActiveRecord::Base
         has_many :a_r_posts
         has_many :a_r_comments, :as => :commentable
+        belongs_to :librarian, :polymorphic => true
       end
 
       class ARPost < ActiveRecord::Base
@@ -23,14 +24,17 @@ describe "RailsAdmin::Adapters::ActiveRecord", :active_record => true do
 
       class ARCategory < ActiveRecord::Base
         has_and_belongs_to_many :a_r_posts
+        belongs_to :librarian, :polymorphic => true
       end
 
       class ARUser < ActiveRecord::Base
         has_one :a_r_profile
+        has_many :a_r_categories, :as => :librarian
       end
 
       class ARProfile < ActiveRecord::Base
         belongs_to :a_r_user
+        has_many :a_r_blogs, :as => :librarian
       end
 
       class ARComment < ActiveRecord::Base
@@ -148,6 +152,13 @@ describe "RailsAdmin::Adapters::ActiveRecord", :active_record => true do
       })
       expect(param[:primary_key_proc].call).to eq('id')
       expect(param[:model_proc].call).to eq(ARComment)
+    end
+
+
+    it 'has correct opposite model lookup for polymorphic associations' do
+      RailsAdmin::Config.stub!(:models_pool).and_return(["ARBlog", "ARPost", "ARCategory", "ARUser", "ARProfile", "ARComment"])
+      expect(@category.associations.find{|a| a[:name] == :librarian}[:model_proc].call).to eq [ARUser]
+      expect(@blog.associations.find{|a| a[:name] == :librarian}[:model_proc].call).to eq [ARProfile]
     end
   end
 
@@ -319,8 +330,28 @@ describe "RailsAdmin::Adapters::ActiveRecord", :active_record => true do
     end
 
     it "supports integer type query" do
-      expect(@abstract_model.send(:build_statement, :field, :integer, "1", nil)).to eq(["(field = ?)", 1])
+      expect(@abstract_model.send(:build_statement, :field, :integer, "1"   , nil)).to eq(["(field = ?)", 1])
       expect(@abstract_model.send(:build_statement, :field, :integer, 'word', nil)).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, "1"   , 'default')).to eq(["(field = ?)", 1])
+      expect(@abstract_model.send(:build_statement, :field, :integer, 'word', 'default')).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, "1"   , 'between')).to eq(["(field = ?)", 1])
+      expect(@abstract_model.send(:build_statement, :field, :integer, 'word', 'between')).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['6', ''  , ''  ], 'default')).to eq(["(field = ?)", 6])
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['7', '10', ''  ], 'default')).to eq(["(field = ?)", 7])
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['8', ''  , '20'], 'default')).to eq(["(field = ?)", 8])
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['9', '10', '20'], 'default')).to eq(["(field = ?)", 9])
+    end
+
+    it "supports integer type range query" do
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['', '', ''], 'between')).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['2', '', ''], 'between')).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['', '3', ''], 'between')).to eq(["(field >= ?)", 3])
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['', '', '5'], 'between')).to eq(["(field <= ?)", 5])
+      expect(@abstract_model.send(:build_statement, :field, :integer, [''  , '10', '20'], 'between')).to eq(["(field BETWEEN ? AND ?)", 10, 20])
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['15', '10', '20'], 'between')).to eq(["(field BETWEEN ? AND ?)", 10, 20])
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['', 'word1', ''     ], 'between')).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['', ''     , 'word2'], 'between')).to be_nil
+      expect(@abstract_model.send(:build_statement, :field, :integer, ['', 'word3', 'word4'], 'between')).to be_nil
     end
 
     it "supports decimal type query" do
@@ -331,13 +362,17 @@ describe "RailsAdmin::Adapters::ActiveRecord", :active_record => true do
     it "supports string type query" do
       expect(@abstract_model.send(:build_statement, :field, :string, "", nil)).to be_nil
       expect(@abstract_model.send(:build_statement, :field, :string, "foo", "was")).to be_nil
-      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "default")).to eq(["(field #{@like} ?)", "%foo%"])
-      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "like")).to eq(["(field #{@like} ?)", "%foo%"])
-      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "starts_with")).to eq(["(field #{@like} ?)", "foo%"])
-      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "ends_with")).to eq(["(field #{@like} ?)", "%foo"])
-      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "is")).to eq(["(field #{@like} ?)", "foo"])
+      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "default")).to eq(["(LOWER(field) #{@like} ?)", "%foo%"])
+      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "like")).to eq(["(LOWER(field) #{@like} ?)", "%foo%"])
+      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "starts_with")).to eq(["(LOWER(field) #{@like} ?)", "foo%"])
+      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "ends_with")).to eq(["(LOWER(field) #{@like} ?)", "%foo"])
+      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "is")).to eq(["(LOWER(field) #{@like} ?)", "foo"])
     end
 
+    it "performs case-insensitive searches" do
+      expect(@abstract_model.send(:build_statement, :field, :string, "foo", "default")).to eq(["(LOWER(field) #{@like} ?)", "%foo%"])
+      expect(@abstract_model.send(:build_statement, :field, :string, "FOO", "default")).to eq(["(LOWER(field) #{@like} ?)", "%foo%"])
+    end
 
     it "supports date type query" do
       expect(@abstract_model.send(:filter_conditions, { "date_field" => { "1" => { :v => ["", "01/02/2012", "01/03/2012"], :o => 'between' } } })).to eq(["((field_tests.date_field BETWEEN ? AND ?))", Date.new(2012,1,2), Date.new(2012,1,3)])
