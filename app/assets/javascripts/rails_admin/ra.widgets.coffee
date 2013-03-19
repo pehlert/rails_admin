@@ -35,7 +35,7 @@ $(document).on 'rails_admin.dom_ready', ->
 
     $('form [data-fileupload]').each ->
       input = this
-      $(document).on 'click', $(this).find(".delete input[type='checkbox']"), ->
+      $(this).on 'click', ".delete input[type='checkbox']", ->
         $(input).children('.toggle').toggle('slow')
 
     # fileupload-preview
@@ -150,11 +150,10 @@ $(document).on 'rails_admin.dom_ready', ->
 
     goCkeditors = ->
       $('form [data-richtext=ckeditor]').not('.ckeditored').each (index, domEle) ->
-        options = $(this).data
-        if instance = window.CKEDITOR.instances[this.id]
-          instance.destroy(true)
-
-        window.CKEDITOR.replace(this, options['options'])
+        try
+          if instance = window.CKEDITOR.instances[this.id]
+            instance.destroy(true)
+        window.CKEDITOR.replace(this, $(this).data('options'))
         $(this).addClass('ckeditored')
 
     $editors = $('form [data-richtext=ckeditor]').not('.ckeditored')
